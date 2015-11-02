@@ -69,14 +69,16 @@ void str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len
 	
 	char *buf;
 	long lsize, ci;
-	char sends[DATALEN];
+	char sends[DATALEN+1];
 	struct ack_so ack;
 	int n, slen;
+	
 	struct sockaddr_in addrR;
-	int lenR;
-	//float time_inv = 0.0;
-	//struct timeval sendt, recvt;
+	socklen_t lenR;
+	
 	ci = 0;
+
+	char identifier = '1';
 
 	fseek (fp , 0 , SEEK_END);
 	lsize = ftell (fp);
@@ -103,27 +105,33 @@ void str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len
 			slen = DATALEN;
 			
 		memcpy(sends, (buf+ci), slen);
+		sends[slen] = identifier;
 		
-		n = sendto(sockfd, &sends, slen, 0, addr, addrlen); 
-		if(n == -1) {
+		//Keep retrying
+		while ((n = sendto(sockfd, &sends, slen+1, 0, addr, addrlen)) == -1){
 			printf("send error!");								//send the data
-			exit(1);
 		}
-		ci += slen;
 		
-		printf("Sent %ld\n", ci);
-		
-		char a[1];
 		//Waiting for acknowledgement -- resend will happen here
-		if ((n=recvfrom(sockfd, &a, 1, 0, (struct sockaddr *)&addrR, &lenR)) == -1) {      //receive the packet
+		//force stop after retry several times as server may already end
+		if ((n=recvfrom(sockfd, &ack, 2, 0, (struct sockaddr *)&addrR, &lenR)) == -1) {      //receive the packet
 			printf("error receiving");
 		
 		}
 		
-		/*
 		//ACK
 		if (ack.num == 1 && ack.len == 0){
-			printf("Received acknowledgement");
+			printf("Received acknowledgement\n");
+			
+			ci += slen;
+			printf("Sent %ld\n", ci);
+			
+			if (identifier == '1'){
+				identifier = '0';
+			}
+			else{
+				identifier = '1';
+			}
 		}
 		
 		//NACK
@@ -134,7 +142,7 @@ void str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len
 		else{
 			
 		}
-		*/
+		
 	}
 	
 }
