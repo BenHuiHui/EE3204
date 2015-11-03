@@ -1,6 +1,8 @@
 #include "headsock.h"
 
-void str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len);                
+float str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len);                
+int  send_data(char data[DATALEN+1], int len, int sockfd, struct sockaddr *addr, int addrlen);
+void tv_sub(struct  timeval *out, struct timeval *in);	    //calcu the time interval between out and in
 
 int main(int argc, char *argv[])
 {
@@ -9,8 +11,11 @@ int main(int argc, char *argv[])
 	char **pptr;
 	struct hostent *sh;
 	struct in_addr **addrs;
+	int num_of_errors;
 	FILE *fp;
 
+	float ti, rt;
+	
 	if (argc!= 2)
 	{
 		printf("parameters not match.");
@@ -57,24 +62,28 @@ int main(int argc, char *argv[])
 	}
 	
 	//while(1){
-		str_cli1(fp, sockfd, (struct sockaddr *)&ser_addr, sizeof(struct sockaddr_in), &len);   // receive and send
+	ti = str_cli1(fp, sockfd, (struct sockaddr *)&ser_addr, sizeof(struct sockaddr_in), &len);   // receive and send
 	//}
 	
+	rt = (len/(float)ti);                                         //caculate the average transmission rate
+	printf("Time(ms) : %.3f, Data sent(byte): %d\nData rate: %f (Kbytes/s)\n", ti, (int)len, rt);
+	
+	fclose(fp);
 	close(sockfd);
 	exit(0);
 }
 
-void str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len)
+float str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len, int *num_of_errors)
 {
 	
 	char *buf;
 	long lsize, ci;
 	char sends[DATALEN+1];
-	struct ack_so ack;
-	int n, slen;
+	int slen;
+	int code;
 	
-	struct sockaddr_in addrR;
-	socklen_t lenR;
+	float time_inv = 0.0;
+	struct timeval sendt, recvt;
 	
 	ci = 0;
 
@@ -95,7 +104,8 @@ void str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len
 	
 	/*** the whole file is loaded in the buffer. ***/
 	buf[lsize] ='\0';									//append the end byte
-	//gettimeofday(&sendt, NULL);							//get the current time
+	
+	gettimeofday(&sendt, NULL);							//get the current time
 	
 	while(ci<= lsize)
 	{
@@ -107,42 +117,86 @@ void str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len
 		memcpy(sends, (buf+ci), slen);
 		sends[slen] = identifier;
 		
-		//Keep retrying
-		while ((n = sendto(sockfd, &sends, slen+1, 0, addr, addrlen)) == -1){
-			printf("send error!");								//send the data
-		}
+		code = send_data(sends, slen+1, sockfd, addr, addrlen);
 		
-		//Waiting for acknowledgement -- resend will happen here
-		//force stop after retry several times as server may already end
-		if ((n=recvfrom(sockfd, &ack, 2, 0, (struct sockaddr *)&addrR, &lenR)) == -1) {      //receive the packet
-			printf("error receiving");
-		
-		}
-		
-		//ACK
-		if (ack.num == 1 && ack.len == 0){
-			printf("Received acknowledgement\n");
+		while (code != 0){
 			
-			ci += slen;
-			printf("Sent %ld\n", ci);
-			
-			if (identifier == '1'){
-				identifier = '0';
+			num_of_errors ++;
+			if (code == 1){
+				code = send_data(sends, slen+1, sockfd, addr, addrlen);
 			}
 			else{
-				identifier = '1';
+				exit(2);
 			}
 		}
 		
-		//NACK
-		else if(ack.num == 0 && ack.len == 0){
-			
-		} 
+		printf("Received acknowledgement\n");
 		
-		else{
-			
+		ci += slen;
+		printf("Sent %ld\n", ci);
+		
+		if (identifier == '1'){
+			identifier = '0';
 		}
-		
+		else{
+			identifier = '1';
+		}
 	}
 	
+	*len= ci;                                                      
+	gettimeofday(&recvt, NULL);
+	tv_sub(&recvt, &sendt);                                                                 // get the whole trans time
+	time_inv += (recvt.tv_sec)*1000.0 + (recvt.tv_usec)/1000.0;
+	return(time_inv);
+}
+
+//0 OK
+//1 resend
+//2 exit
+int  send_data(char data[DATALEN+1], int len, int sockfd, struct sockaddr *addr, int addrlen){
+	
+	struct ack_so ack;
+	struct sockaddr_in addrR;
+	socklen_t lenR;
+	int n;
+	int count = 0;
+	
+	//Keep retrying
+	//force stop after retry several times as server may already end
+	while ((n = sendto(sockfd, data, len, 0, addr, addrlen)) == -1){
+		printf("send error!");								//send the data
+		
+		count ++;
+		if (count > 100) return 2;
+	}
+	
+	//Waiting for acknowledgement -- resend will happen here
+	if ((n=recvfrom(sockfd, &ack, 2, 0, (struct sockaddr *)&addrR, &lenR)) == -1) {      //receive the packet
+		printf("error receiving");
+		return 1;
+	}
+	
+	if (ack.num == 1 && ack.len == 0){
+		return 0;
+	}
+		
+	//NACK
+	else if(ack.num == 0 && ack.len == 0){
+		return 1;		
+	} 
+		
+	else{
+		return 1;		
+	}
+	
+}
+
+void tv_sub(struct  timeval *out, struct timeval *in)
+{
+	if ((out->tv_usec -= in->tv_usec) <0)
+	{
+		--out ->tv_sec;
+		out ->tv_usec += 1000000;
+	}
+	out->tv_sec -= in->tv_sec;
 }
