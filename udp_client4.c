@@ -1,6 +1,6 @@
 #include "headsock.h"
 
-float str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len);                
+float str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len, int *num_of_errors, int *total);                
 int  send_data(char data[DATALEN+1], int len, int sockfd, struct sockaddr *addr, int addrlen);
 void tv_sub(struct  timeval *out, struct timeval *in);	    //calcu the time interval between out and in
 
@@ -11,7 +11,8 @@ int main(int argc, char *argv[])
 	char **pptr;
 	struct hostent *sh;
 	struct in_addr **addrs;
-	int num_of_errors;
+	int num_of_errors = 0;
+	int total = 0;
 	FILE *fp;
 
 	float ti, rt;
@@ -62,18 +63,18 @@ int main(int argc, char *argv[])
 	}
 	
 	//while(1){
-	ti = str_cli1(fp, sockfd, (struct sockaddr *)&ser_addr, sizeof(struct sockaddr_in), &len);   // receive and send
+	ti = str_cli1(fp, sockfd, (struct sockaddr *)&ser_addr, sizeof(struct sockaddr_in), &len, &num_of_errors, &total);   // receive and send
 	//}
 	
 	rt = (len/(float)ti);                                         //caculate the average transmission rate
-	printf("Time(ms) : %.3f, Data sent(byte): %d\nData rate: %f (Kbytes/s)\n", ti, (int)len, rt);
+	printf("Time(ms) : %.3f, Data sent(byte): %d\nData rate: %f (Kbytes/s) number of errors %d total %d\n", ti, (int)len, rt, num_of_errors, total);
 	
 	fclose(fp);
 	close(sockfd);
 	exit(0);
 }
 
-float str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len, int *num_of_errors)
+float str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *len, int *num_of_errors, int *total)
 {
 	
 	char *buf;
@@ -118,22 +119,23 @@ float str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *le
 		sends[slen] = identifier;
 		
 		code = send_data(sends, slen+1, sockfd, addr, addrlen);
+		*total = *total + 1;
 		
 		while (code != 0){
-			
-			num_of_errors ++;
+			*num_of_errors = *num_of_errors + 1;
 			if (code == 1){
 				code = send_data(sends, slen+1, sockfd, addr, addrlen);
+				*total = *total +1;
 			}
 			else{
 				exit(2);
 			}
 		}
 		
-		printf("Received acknowledgement\n");
+		//printf("Received acknowledgement\n");
 		
 		ci += slen;
-		printf("Sent %ld\n", ci);
+		//printf("Sent %ld\n", ci);
 		
 		if (identifier == '1'){
 			identifier = '0';
