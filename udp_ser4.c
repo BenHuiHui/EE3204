@@ -1,16 +1,26 @@
 #include "headsock.h"
 
-void str_ser1(int sockfd);                                                           // transmitting and receiving function
+void str_ser1(int sockfd, int error_rate);                                                           // transmitting and receiving function
 
 int main(int argc, char *argv[])
 {
 	int sockfd;
 	struct sockaddr_in my_addr;
+	int error_rate = 0;
 
 	if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {			//create socket
 		printf("error in socket");
 		exit(1);
 	}
+
+	if (argc != 2){
+		printf("Parameters doesn't match");
+		exit(2);
+	}
+
+	error_rate = atoi(argv[1]);
+	if (error_rate > 100)
+		error_rate = 100;
 
 	my_addr.sin_family = AF_INET;
 	my_addr.sin_port = htons(MYUDP_PORT);
@@ -23,14 +33,14 @@ int main(int argc, char *argv[])
 	printf("start receiving\n");
 	
 	while(1){
-		str_ser1(sockfd);                        // send and receive
+		str_ser1(sockfd, error_rate);                        // send and receive
 	}
 	
 	close(sockfd);
 	exit(0);
 }
 
-void str_ser1(int sockfd)
+void str_ser1(int sockfd, int error_rate)
 {
 	char buf[BUFSIZE];
 	FILE *fp;
@@ -38,6 +48,7 @@ void str_ser1(int sockfd)
 	char identifier = '2';
 	struct ack_so ack;
 	
+	int error_index = 0;
 	int end = 0, n = 0;
 
 	struct sockaddr_in addr;
@@ -64,7 +75,7 @@ void str_ser1(int sockfd)
 		}
 		
 		//Received new data
-		if (n > 0 && recvs[n-1] != identifier){
+		if (n > 0 && (recvs[n-1] != identifier) && error_index >= error_rate){
 			memcpy((buf+lseek), recvs, n-1);
 			lseek += n-1;
 			identifier = recvs[n-1];
@@ -72,7 +83,7 @@ void str_ser1(int sockfd)
 		
 		//Send acknowledgement
 		//NACK
-		if(ack.num == 2){
+		if(ack.num == 2 || error_index < error_rate){
 			ack.num = 0;
 		}
 		else
@@ -85,6 +96,7 @@ void str_ser1(int sockfd)
 			printf("Error in sending\n");
 		}
 		
+		error_index = (error_index + 1) % 100;
 	}
 	
 	if ((fp = fopen ("myUDPreceive.txt","wt")) == NULL)
