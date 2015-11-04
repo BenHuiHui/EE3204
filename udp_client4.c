@@ -49,6 +49,7 @@ int main(int argc, char *argv[])
 		break;
 	}
 
+	//IVP4
 	ser_addr.sin_family = AF_INET;
 	ser_addr.sin_port = htons(MYUDP_PORT);
 	//copy the first address
@@ -147,7 +148,9 @@ float str_cli1(FILE *fp, int sockfd, struct sockaddr *addr, int addrlen, int *le
 	
 	*len= ci;                                                      
 	gettimeofday(&recvt, NULL);
-	tv_sub(&recvt, &sendt);                                                                 // get the whole trans time
+	tv_sub(&recvt, &sendt);   
+	
+	//Change to millisecond
 	time_inv += (recvt.tv_sec)*1000.0 + (recvt.tv_usec)/1000.0;
 	return(time_inv);
 }
@@ -186,7 +189,8 @@ int  send_data(char data[DATALEN+1], int len, int sockfd, struct sockaddr *addr,
 	else if(ack.num == 0 && ack.len == 0){
 		return 1;		
 	} 
-		
+	
+	//ACK damanged	
 	else{
 		return 1;		
 	}
@@ -195,6 +199,8 @@ int  send_data(char data[DATALEN+1], int len, int sockfd, struct sockaddr *addr,
 
 void tv_sub(struct  timeval *out, struct timeval *in)
 {
+	//mircosecond 1s = 10^6 ms
+	//substraction already happened!
 	if ((out->tv_usec -= in->tv_usec) <0)
 	{
 		--out ->tv_sec;
