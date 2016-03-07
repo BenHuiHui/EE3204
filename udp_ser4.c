@@ -97,6 +97,7 @@ void str_ser1(int sockfd, int error_rate)
 		}
 		
 		error_index = (error_index + 1) % 100;
+		
 	}
 	
 	if ((fp = fopen ("myUDPreceive.txt","wt")) == NULL)
